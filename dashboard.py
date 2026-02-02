@@ -1,0 +1,465 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from prophet import Prophet
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score
+
+# ตั้งค่าหน้า Dashboard
+st.set_page_config(page_title="Thai Travel AI Dashboard", layout="wide")
+
+st.title("Thai Travel Statistics & AI Analysis")
+
+# --- Helper Functions ---
+thai_months_abbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+thai_months_full = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+
+def format_thai_date(date_obj, full_month=False):
+    if pd.isnull(date_obj): return ""
+    month_idx = date_obj.month - 1
+    year_thai = date_obj.year + 543
+    month_name = thai_months_full[month_idx] if full_month else thai_months_abbr[month_idx]
+    return f"{month_name} {year_thai}"
+
+def format_number_with_unit(val):
+    return f"{int(val):,} คน"
+
+def clean_complex_string(val):
+    if pd.isna(val): return 0
+    val = str(val).replace(',', '').strip()
+    if not val or val.lower() == 'nan': return 0
+    
+    if '-' in val:
+        try:
+            parts = val.split('-')
+            return (float(parts[0]) + float(parts[1])) / 2
+        except:
+            pass
+            
+    if 'ชม.' in val or 'นาที' in val:
+        h, m = 0, 0
+        try:
+            if 'ชม.' in val:
+                parts = val.split('ชม.')
+                h = float(parts[0])
+                val = parts[1]
+            if 'นาที' in val:
+                m = float(val.replace('นาที', ''))
+            return h * 60 + m
+        except:
+            pass
+            
+    try:
+        return float(val)
+    except:
+        return 0
+
+# --- 1. โหลดข้อมูลนักท่องเที่ยว (Time Series) ---
+@st.cache_data 
+def load_tourist_data():
+    file_id = '1nm8yyywGVr7-q8BsdeitUGWZgOh9kBRt'
+    csv_url = f'https://drive.google.com/uc?export=download&id={file_id}'
+    df = pd.read_csv(csv_url, header=[1])
+    
+    cols_to_drop = [col for col in df.columns if 'ม.ค.-ธ.ค.' in col or 'ม.ค.-ก.ค.' in col]
+    df = df.drop(columns=cols_to_drop)
+    
+    regions_to_remove = ['ภาคกลางไม่รวมกรุงเทพฯ', 'ภาคตะวันออก', 'ภาคใต้', 'ภาคเหนือ', 'ภาคตะวันออกเฉียงเหนือ', 'ทั่วประเทศไทย']
+    df = df[~df['Unnamed: 0'].isin(regions_to_remove)]
+    
+    df = df.rename(columns={'Unnamed: 0': 'Province'})
+    df = df.dropna(subset=['Province'])
+    df = df[df['Province'].astype(str).str.lower() != 'nan']
+    df = df[~df['Province'].astype(str).str.contains('อ้างอิง', na=False)]
+
+    data_cols = df.columns[1:] 
+    new_date_cols = pd.date_range(start='2015-01-01', periods=len(data_cols), freq='MS')
+    df.columns = ['Province'] + list(new_date_cols)
+
+    for col in new_date_cols:
+        df[col] = df[col].astype(str).str.replace(',', '', regex=True)
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+    return df
+
+# --- 2. โหลดข้อมูลปัจจัย + Target ---
+@st.cache_data
+def load_factor_and_target_data():
+    file_id = '1UXLVSfu49m5ap9SYsBovT7Axmcvu0wN0'
+    csv_url = f'https://drive.google.com/uc?export=download&id={file_id}'
+    df = pd.read_csv(csv_url)
+    
+    if 'จังหวัด' in df.columns:
+        df = df.rename(columns={'จังหวัด': 'Province'})
+        
+    df = df.dropna(subset=['Province'])
+    df = df[df['Province'].astype(str).str.lower() != 'nan']
+    df = df[~df['Province'].astype(str).str.contains('อ้างอิง', na=False)]
+
+    column_mapping = {
+        'สนามบิน\n (มี=1, ไม่มี=0)': 'สนามบิน',
+        'รถไฟ\n (มี=1,ไม่มี=0)': 'รถไฟ',
+        'ระยะห่างจากกทม.\n(กิโลเมตร) โดยประมาณ': 'ระยะห่างจากกรุงเทพ',
+        'ระยะเวลาจากกทม. ไปยังจังหวัดต่างๆ\n (เดินทางโดยรถยนต์)': 'เดินทางโดยรถยนต์',
+        'จำนวนการค้นหาบน\nFacebook ': 'จำนวนการค้นหาบน Facebook',
+        'จำนวนการค้นหาบน\nTiktok': 'จำนวนการค้นหาบน Tiktok',
+        'จำนวนการค้นหาบน\nInstagram ': 'จำนวนการค้นหาบน Instagram',
+        'แหล่งท่องเที่ยวเชิงศาสนา': 'จำนวนสถานที่ท่องเที่ยว', 
+        'แหล่งท่องเที่ยวเชิงประวัติศาสตร์\nและโบราณสถาน': 'โบราณสถาน',
+        'พิพิธภัณฑ์และแหล่งเรียนรู้': 'พิพิธภัณฑ์',
+        'แหล่งท่องเที่ยวเชิงนันทนาการ\nและสวนสาธารณะ': 'สวนสาธารณะ',
+        'แหล่งท่องเที่ยวเชิงพาณิชย์และตลาด': 'ตลาด',
+        'แหล่งท่องเที่ยวเชิงวัฒนธรรม\nร่วมสมัยและบันเทิง': 'ร่วมสมัยและบันเทิง',
+        'แหล่งท่องเที่ยวเชิงธรรมชาติ\nและสิ่งแวดล้อม': 'ธรรมชาติและสิ่งแวดล้อม',
+        'โครงสร้างพื้นฐานและสัญลักษณ์เมือง': 'สัญลักษณ์เมือง',
+        'คาเฟ่': 'ความหนาแน่นของคาเฟ่',
+        'ปัญหาด้านเศรษฐกิจและรายได้ประชากร': 'ปัญหาด้านเศรษฐกิจ',
+        'ปัญหาโครงสร้างพื้นฐานและระบบคมนาคม': 'ปัญหาระบบการคมนาคม',
+        'ปัญหาสิ่งแวดล้อมและมลพิษ': 'ปัญหามลพิษ',
+        'ปัญหาภัยพิบัติและความเสี่ยงด้านสภาพภูมิอากาศ': 'ปัญหาความเสี่ยงด้านภัยพิบัติ',
+        'ปัญหาการขยายตัวของเมืองและคุณภาพชีวิต': 'ปัญหาคุณภาพชีวิต',
+        'ปัญหาโครงสร้างประชากรและการย้ายถิ่น': 'ปัญหาโครงสร้างประชากร',
+        'จำนวนนักท่องเที่ยว': 'Total_Tourists'
+    }
+
+    new_df = pd.DataFrame()
+    new_df['Province'] = df['Province']
+    
+    for csv_col, target_col in column_mapping.items():
+        if csv_col in df.columns:
+            new_df[target_col] = df[csv_col].apply(clean_complex_string)
+        else:
+            new_df[target_col] = 0
+            
+    new_df['ความสนใจต่อที่เที่ยว'] = (new_df['จำนวนการค้นหาบน Facebook'] + 
+                                      new_df['จำนวนการค้นหาบน Tiktok'] + 
+                                      new_df['จำนวนการค้นหาบน Instagram'])
+
+    required_features = [
+        'สนามบิน', 'รถไฟ', 'ระยะห่างจากกรุงเทพ', 'เดินทางโดยรถยนต์',
+        'จำนวนการค้นหาบน Facebook', 'จำนวนการค้นหาบน Tiktok', 'จำนวนการค้นหาบน Instagram',
+        'จำนวนสถานที่ท่องเที่ยว',
+        'โบราณสถาน', 'พิพิธภัณฑ์', 'สวนสาธารณะ', 'ตลาด', 'ร่วมสมัยและบันเทิง', 'ธรรมชาติและสิ่งแวดล้อม', 'สัญลักษณ์เมือง',
+        'ปัญหาด้านเศรษฐกิจ', 'ปัญหาระบบการคมนาคม', 'ปัญหามลพิษ', 'ปัญหาความเสี่ยงด้านภัยพิบัติ', 'ปัญหาคุณภาพชีวิต', 'ปัญหาโครงสร้างประชากร',
+        'ความหนาแน่นของคาเฟ่',
+        'ความสนใจต่อที่เที่ยว'
+    ]
+    
+    final_cols = ['Province', 'Total_Tourists'] + [c for c in required_features if c in new_df.columns]
+    df_final = new_df[final_cols]
+    df_final = df_final.groupby('Province').last().reset_index()
+    
+    return df_final, required_features
+
+# --- Main App Logic ---
+
+try:
+    with st.spinner('กำลังโหลดข้อมูลและเตรียมระบบ...'):
+        df_tourist = load_tourist_data()
+        df_model_data, feature_names_list = load_factor_and_target_data()
+        
+    province_list = sorted(df_tourist['Province'].unique())
+
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
+
+# สร้าง Tabs
+tab1, tab2 = st.tabs(["📊 พยากรณ์รายจังหวัด (Forecast)", "🧠 วิเคราะห์ปัจจัย & SWOT (AI Model)"])
+
+# ==============================================================================
+# TAB 1: Forecast
+# ==============================================================================
+with tab1:
+    with st.container(border=True):
+        st.write("###### ⚙️ ตั้งค่าการแสดงผล")
+        col_mode, col_select = st.columns([1, 2])
+        
+        with col_mode:
+            view_mode = st.radio(
+                "รูปแบบข้อมูล:",
+                ["ภาพรวมทั้งประเทศ", "เจาะจงรายจังหวัด"],
+                horizontal=True,
+                index=1
+            )
+
+        with col_select:
+            if view_mode == "เจาะจงรายจังหวัด":
+                selected_province = st.selectbox(
+                    "เลือกจังหวัดที่ต้องการดูข้อมูล:",
+                    province_list,
+                    index=province_list.index('เชียงใหม่') if 'เชียงใหม่' in province_list else 0
+                )
+            else:
+                selected_province = 'ทั่วประเทศไทย'
+
+    if selected_province == 'ทั่วประเทศไทย' and 'ทั่วประเทศไทย' not in df_tourist['Province'].values:
+        province_data = pd.DataFrame(df_tourist.drop(columns=['Province']).sum()).T
+        province_data['Province'] = 'ทั่วประเทศไทย'
+    else:
+        province_data = df_tourist[df_tourist['Province'] == selected_province]
+    
+    melted_df = province_data.melt(id_vars=['Province'], var_name='Date', value_name='Tourists')
+    melted_df['Date'] = pd.to_datetime(melted_df['Date'])
+    melted_df = melted_df.dropna(subset=['Tourists'])
+    melted_df = melted_df.sort_values('Date')
+    melted_df['ThaiDate'] = melted_df['Date'].apply(lambda x: format_thai_date(x, full_month=True))
+
+    st.divider()
+
+    if not melted_df.empty:
+        last_date = melted_df['Date'].iloc[-1]
+        last_value = melted_df['Tourists'].iloc[-1]
+        
+        col_head, col_met = st.columns([3, 1])
+        with col_head:
+            st.subheader(f"📈 แนวโน้มและพยากรณ์: {selected_province}")
+        with col_met:
+            st.metric(label=f"ข้อมูลล่าสุด ({format_thai_date(last_date)})", value=f"{last_value:,.0f} คน")
+        
+        with st.spinner("กำลังประมวลผลการพยากรณ์..."):
+            prophet_df = melted_df[['Date', 'Tourists']].rename(columns={'Date': 'ds', 'Tourists': 'y'})
+            m = Prophet()
+            m.fit(prophet_df)
+            future = m.make_future_dataframe(periods=12, freq='MS')
+            forecast = m.predict(future)
+            
+            forecast['ThaiDate'] = forecast['ds'].apply(lambda x: format_thai_date(x, full_month=True))
+            history = forecast[forecast['ds'] <= last_date]
+            future_only = forecast[forecast['ds'] > last_date]
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=history['ds'], y=history['yhat'], mode='lines+markers', name='ข้อมูลจริง/เทรนด์', line=dict(color='#1f77b4', width=3), customdata=history['ThaiDate'], hovertemplate="<b>%{customdata}</b><br>จำนวน: %{y:,.0f} คน<extra></extra>"))
+            fig.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat'], mode='lines+markers', name='พยากรณ์ 12 เดือน', line=dict(color='#FF4B4B', width=3, dash='dot'), customdata=future_only['ThaiDate'], hovertemplate="<b>%{customdata}</b><br>พยากรณ์: %{y:,.0f} คน<extra></extra>"))
+            fig.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat_upper'], mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat_lower'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 75, 75, 0.2)', showlegend=False, hoverinfo='skip'))
+            
+            tick_vals = pd.date_range(start=forecast['ds'].min(), end=forecast['ds'].max(), freq='6MS')
+            tick_text = [format_thai_date(d) for d in tick_vals]
+            fig.update_layout(xaxis=dict(tickvals=tick_vals, ticktext=tick_text, title="ระยะเวลา (พ.ศ.)"), yaxis=dict(title="จำนวนนักท่องเที่ยว (คน)"), legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig, use_container_width=True)
+
+            row2_col1, row2_col2 = st.columns([1, 2])
+            with row2_col1:
+                st.write("#### 📋 ข้อมูลประวัติย้อนหลัง")
+                display_raw = melted_df[['Date', 'Tourists']].sort_values('Date', ascending=False).copy()
+                display_raw['Date'] = display_raw['Date'].apply(lambda x: format_thai_date(x, full_month=True))
+                display_raw['Tourists'] = display_raw['Tourists'].apply(format_number_with_unit)
+                display_raw.columns = ['เดือน/ปี', 'จำนวนนักท่องเที่ยว']
+                st.dataframe(display_raw, height=400, use_container_width=True, hide_index=True)
+
+            with row2_col2:
+                st.write("#### 📊 องค์ประกอบของข้อมูล")
+                fig_trend = px.line(forecast, x='ds', y='trend', custom_data=['ThaiDate'])
+                fig_trend.update_traces(line_color='#2ca02c')
+                fig_trend.update_layout(title="1. แนวโน้มภาพรวม (Trend)", height=200, xaxis_title=None)
+                st.plotly_chart(fig_trend, use_container_width=True)
+
+                fig_season = px.line(future_only, x='ds', y='yearly', markers=True, custom_data=['ThaiDate'])
+                fig_season.update_traces(line_color='#ff7f0e')
+                fig_season.update_xaxes(tickvals=future_only['ds'], ticktext=[thai_months_abbr[d.month-1] for d in future_only['ds']])
+                fig_season.update_layout(title="2. รูปแบบตามฤดูกาล (Seasonality)", height=200, xaxis_title=None)
+                st.plotly_chart(fig_season, use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("🔮 ตารางพยากรณ์ 12 เดือนข้างหน้า")
+            display_forecast = future_only[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
+            display_forecast['ds'] = display_forecast['ds'].apply(lambda x: format_thai_date(x, full_month=True))
+            for col in ['yhat', 'yhat_lower', 'yhat_upper']:
+                display_forecast[col] = display_forecast[col].apply(format_number_with_unit)
+            display_forecast.columns = ['เดือน/ปี', 'ค่าพยากรณ์', 'ขอบเขตล่าง', 'ขอบเขตบน']
+            st.dataframe(display_forecast, use_container_width=True, hide_index=True)
+    else:
+        st.warning("ไม่มีข้อมูลเพียงพอสำหรับการแสดงผล")
+
+# ==============================================================================
+# TAB 2: AI Model & SWOT Analysis
+# ==============================================================================
+with tab2:
+    st.header("🧠 วิเคราะห์ปัจจัยและ SWOT Analysis ด้วย AI")
+
+    with st.spinner("🤖 AI กำลังเรียนรู้ข้อมูล (Random Forest) ..."):
+        train_data = df_model_data.copy()
+        train_data = train_data[train_data['Province'] != 'กรุงเทพมหานคร']
+        
+        X = train_data[feature_names_list]
+        y = train_data['Total_Tourists']
+        
+        rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+        rf_model.fit(X, y)
+        
+        y_pred = rf_model.predict(X)
+        accuracy_score = r2_score(y, y_pred)
+        
+        importances = rf_model.feature_importances_
+        feature_imp_df = pd.DataFrame({'Feature': feature_names_list, 'Importance': importances})
+        feature_imp_df = feature_imp_df.sort_values('Importance', ascending=False)
+
+    # Global Insights
+    st.subheader("1. ประสิทธิภาพโมเดลและความสำคัญของปัจจัย (Global Insights)")
+    
+    col_acc, col_chart = st.columns([1, 3])
+    with col_acc:
+        st.info(f"**ความแม่นยำของโมเดล (R² Score):**")
+        st.metric(label="R-Squared", value=f"{accuracy_score:.2%}")
+        st.caption("ค่า R² ยิ่งเข้าใกล้ 100% แสดงว่าปัจจัยที่เลือกมา สามารถอธิบายจำนวนนักท่องเที่ยวได้ดีมาก")
+    
+    with col_chart:
+        uncontrollable_vars = ['ระยะห่างจากกรุงเทพ', 'เดินทางโดยรถยนต์', 'รถไฟ', 'สนามบิน']
+        result_vars = ['จำนวนการค้นหาบน Facebook', 'จำนวนการค้นหาบน Tiktok', 'จำนวนการค้นหาบน Instagram', 'ความสนใจต่อที่เที่ยว']
+        actionable_vars = [f for f in feature_names_list if f not in uncontrollable_vars and f not in result_vars]
+        
+        top_features_plot = feature_imp_df.head(15).sort_values('Importance', ascending=True)
+        fig_imp = px.bar(top_features_plot, x='Importance', y='Feature', orientation='h', 
+                         text_auto='.3f', color='Importance', color_continuous_scale='Blues')
+        fig_imp.update_layout(xaxis_title="ระดับความสำคัญ", yaxis_title="ปัจจัย", showlegend=False, height=400)
+        st.plotly_chart(fig_imp, use_container_width=True)
+
+    st.markdown("---")
+
+    # SWOT Analysis
+    sorted_provinces_df = train_data[['Province', 'Total_Tourists']].sort_values('Total_Tourists')
+    sorted_provinces_list = sorted_provinces_df['Province'].tolist()
+    
+    st.subheader("2. SWOT Analysis: รายจังหวัด (AI Generated)")
+    
+    col_sel_prov, col_dummy = st.columns([1, 2])
+    with col_sel_prov:
+        selected_swot_prov = st.selectbox("🔎 เลือกจังหวัด (เรียงจากนักท่องเที่ยวน้อย -> มาก)", sorted_provinces_list)
+
+    if selected_swot_prov:
+        prov_row = train_data[train_data['Province'] == selected_swot_prov].iloc[0]
+        prov_val = prov_row['Total_Tourists']
+        top_10_provinces = train_data.nlargest(10, 'Total_Tourists')
+        
+        # [แก้ไข 1] ลบคำว่า "ผลการวิเคราะห์..." เหลือแค่ caption จำนวนนักท่องเที่ยว
+        st.caption(f"จำนวนนักท่องเที่ยว (รายปี): {prov_val:,.0f} คน")
+        
+        comparison_data = []
+        for feature in feature_names_list:
+            prov_v = prov_row[feature]
+            bench_v = top_10_provinces[feature].mean()
+            comparison_data.append({
+                'Feature': feature,
+                'Value': prov_v,
+                'Benchmark (Top10)': bench_v,
+                'Gap': prov_v - bench_v
+            })
+        comp_df = pd.DataFrame(comparison_data).set_index('Feature')
+
+        # Action Plan
+        st.subheader("🛠️ กลยุทธ์เพื่อยกระดับการท่องเที่ยว (Action Plan)")
+        st.caption("แนะนำเฉพาะปัจจัยที่สามารถควบคุมและปรับปรุงได้ (Actionable Factors) เรียงตามความสำคัญจากมากไปน้อย")
+        
+        sorted_actionable_imp = feature_imp_df[feature_imp_df['Feature'].isin(actionable_vars)].sort_values('Importance', ascending=False)
+        
+        weaknesses_list = []
+        opportunities_list = []
+        strengths_list = []
+
+        for idx, row_imp in enumerate(sorted_actionable_imp.itertuples()):
+            feature = row_imp.Feature
+            current = comp_df.loc[feature, 'Value']
+            target = comp_df.loc[feature, 'Benchmark (Top10)']
+            
+            negative_keywords = ['ปัญหา', 'มลพิษ', 'ความเสี่ยง']
+            is_negative_factor = any(kw in feature for kw in negative_keywords)
+            
+            item = {
+                'feature': feature,
+                'current': current,
+                'target': target,
+                'is_neg': is_negative_factor
+            }
+            
+            if is_negative_factor:
+                if current > target:
+                    weaknesses_list.append(item)
+                else:
+                    strengths_list.append(item)
+            else:
+                if current < target:
+                    opportunities_list.append(item)
+                else:
+                    strengths_list.append(item)
+
+        # [แก้ไข 2 & 3] ตรวจสอบว่ามีรายการในแต่ละกลุ่มไหม แล้วสร้าง column เท่าที่จำเป็น
+        active_sections = []
+        
+        if weaknesses_list:
+            active_sections.append({
+                "title": "🚨 จุดอ่อน / สิ่งที่ต้องเร่งแก้ไข (Weaknesses)",
+                "items": weaknesses_list,
+                "color_code": "red",
+                "bg_color": "rgba(255, 0, 0, 0.05)",
+                "status_text": "ต้องลด/แก้ไข"
+            })
+            
+        if opportunities_list:
+            active_sections.append({
+                "title": "⚠️ โอกาสพัฒนา / สิ่งที่ต้องเพิ่ม (Opportunities)",
+                "items": opportunities_list,
+                "color_code": "orange",
+                "bg_color": "rgba(255, 165, 0, 0.05)",
+                "status_text": "ควรสร้าง/ส่งเสริมเพิ่ม"
+            })
+            
+        if strengths_list:
+            active_sections.append({
+                "title": "✅ จุดแข็ง / ศักยภาพสูง (Strengths)",
+                "items": strengths_list,
+                "color_code": "green",
+                "bg_color": "rgba(0, 128, 0, 0.05)",
+                "status_text": "ดีเยี่ยม/ควบคุมได้ดี"
+            })
+            
+        if active_sections:
+            cols = st.columns(len(active_sections))
+            
+            for col, section in zip(cols, active_sections):
+                with col:
+                    # แสดง Header ตามสี
+                    if section['color_code'] == 'red':
+                        st.error(section['title'])
+                    elif section['color_code'] == 'orange':
+                        st.warning(section['title'])
+                    else:
+                        st.success(section['title'])
+                    
+                    # Loop สร้าง Card
+                    for item in section['items']:
+                        # [แก้ไข 3] ลบ "อันดับ X" ออกจากข้อความ
+                        status_display = "ควบคุมได้ดี" if (item['is_neg'] and section['color_code']=='green') else section['status_text']
+                        if section['color_code'] == 'green' and not item['is_neg']:
+                            status_display = "ศักยภาพสูง"
+
+                        diff_text = ""
+                        if section['color_code'] == 'orange':
+                             diff_text = f"(ขาดอีก {abs(item['target'] - item['current']):.2f})"
+                        elif section['color_code'] == 'red':
+                             diff_text = f"(สูงกว่าเกณฑ์ {item['target']:.2f})"
+                        else:
+                             diff_text = f"(Top 10: {item['target']:.2f})"
+
+                        st.markdown(f"""
+                        <div style="background-color:{section['bg_color']}; padding:10px; border-radius:5px; margin-bottom:10px; border-left: 4px solid {section['color_code']};">
+                            <b>{item['feature']}</b><br>
+                            <small>ค่าปัจจุบัน: {item['current']:.2f} {diff_text}</small><br>
+                            <span style="color:{section['color_code']}; font-weight:bold;">{status_display}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+        else:
+            st.info("ไม่พบข้อมูลวิเคราะห์สำหรับจังหวัดนี้")
+
+        st.markdown("---")
+
+        with st.expander("ดูข้อมูลเพิ่มเติม: Social Media & ปัจจัยพื้นฐาน (คลิกเพื่อขยาย)"):
+            col_info1, col_info2 = st.columns(2)
+            with col_info1:
+                st.write("**📱 Social Media Stats**")
+                st.dataframe(comp_df.loc[result_vars].style.format("{:,.2f}"), use_container_width=True)
+            with col_info2:
+                st.write("**🛣️ ปัจจัยพื้นฐาน (Uncontrollable)**")
+                st.dataframe(comp_df.loc[uncontrollable_vars].style.format("{:,.2f}"), use_container_width=True)
