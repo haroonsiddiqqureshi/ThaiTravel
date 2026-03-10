@@ -8,9 +8,9 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score
 
 # ตั้งค่าหน้า Dashboard
-st.set_page_config(page_title="Thai Travel AI Dashboard", layout="wide", page_icon="🇹🇭")
+st.set_page_config(page_title="Thai Travel Dashboard", layout="wide", page_icon="🇹🇭")
 
-st.title("🇹🇭 Thai Travel Statistics & AI Analysis")
+st.title("🇹🇭 Thai Travel Statistics & Data Analysis")
 
 # --- Helper Functions ---
 thai_months_abbr = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
@@ -166,7 +166,7 @@ except Exception as e:
     st.stop()
 
 # สร้าง Tabs
-tab1, tab2 = st.tabs(["📊 พยากรณ์รายจังหวัด (Forecast)", "🧠 วิเคราะห์ปัจจัย & SWOT (AI Model)"])
+tab1, tab2 = st.tabs(["📊 พยากรณ์รายจังหวัด (Forecast)", "🧠 วิเคราะห์ปัจจัย & SWOT"])
 
 # ==============================================================================
 # TAB 1: Forecast
@@ -174,7 +174,7 @@ tab1, tab2 = st.tabs(["📊 พยากรณ์รายจังหวัด 
 with tab1:
     # --- Control Panel ---
     with st.container(border=False):
-        st.write("###### 🛠️ แผงควบคุม (Control Panel)")
+        st.write("###### แผงควบคุม (Control Panel)")
         
         # Layout: แบ่งเป็น 4 ส่วนหลัก (Scope | Province | Analysis Mode | Time Resolution)
         col_scope, col_prov, col_mode, col_time = st.columns([1.5, 3, 1.5, 1.5])
@@ -255,9 +255,9 @@ with tab1:
         col_head, col_met = st.columns([3, 1])
         with col_head:
             if analysis_mode == "ข้อมูลจริง (Raw Data)":
-                st.subheader(f"📈 สถิตินักท่องเที่ยวจริง: {selected_province}")
+                st.subheader(f"สถิตินักท่องเที่ยวจริง: {selected_province}")
             else:
-                st.subheader(f"🔮 พยากรณ์แนวโน้มล่วงหน้า: {selected_province}")
+                st.subheader(f"พยากรณ์แนวโน้มล่วงหน้า: {selected_province}")
         
         with col_met:
             st.metric(label=f"ข้อมูลล่าสุด ({last_date_display})", value=f"{last_value:,.0f} คน")
@@ -293,7 +293,7 @@ with tab1:
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            st.write("#### 📋 ตารางข้อมูลสถิติย้อนหลัง")
+            st.write("#### ตารางข้อมูลสถิติย้อนหลัง")
             display_raw = melted_df[['ThaiDate', 'Tourists']].sort_values('ThaiDate', ascending=False).copy()
             display_raw['Tourists'] = display_raw['Tourists'].apply(format_number_with_unit)
             display_raw.columns = ['ช่วงเวลา', 'จำนวนนักท่องเที่ยว']
@@ -303,7 +303,7 @@ with tab1:
         # MODE 2: Forecast
         # -----------------------------------------------------
         else:
-            with st.spinner("⏳ AI กำลังคำนวณการพยากรณ์..."):
+            with st.spinner("กำลังคำนวณการพยากรณ์..."):
                 # ให้โมเดลเรียนรู้ด้วยข้อมูล "รายเดือน" (raw_melted_df) เสมอ เพื่อจับแพทเทิร์นฤดูกาลให้แม่นยำ
                 prophet_df = raw_melted_df[['Date', 'Tourists']].rename(columns={'Date': 'ds', 'Tourists': 'y'})
                 m = Prophet()
@@ -351,7 +351,7 @@ with tab1:
 
                 row2_col1, row2_col2 = st.columns([1, 2])
                 with row2_col1:
-                    st.write("#### 📋 ข้อมูลประวัติย้อนหลัง")
+                    st.write("#### ข้อมูลประวัติย้อนหลัง")
                     display_raw = melted_df[['ThaiDate', 'Tourists']].sort_values('ThaiDate', ascending=False).copy()
                     display_raw['Tourists'] = display_raw['Tourists'].apply(format_number_with_unit)
                     display_raw.columns = ['ช่วงเวลา', 'จำนวนนักท่องเที่ยว']
@@ -359,7 +359,7 @@ with tab1:
 
                 with row2_col2:
                     if time_resolution == "รายเดือน (Monthly)":
-                        st.write("#### 📊 องค์ประกอบของข้อมูล (Decomposition)")
+                        st.write("#### องค์ประกอบของข้อมูล (Decomposition)")
                         fig_trend = px.line(forecast, x='ds', y='trend', custom_data=['ThaiDate'])
                         fig_trend.update_traces(line_color='#2ca02c')
                         fig_trend.update_layout(title="1. แนวโน้มระยะยาว (Trend)", height=200, xaxis_title=None)
@@ -371,13 +371,13 @@ with tab1:
                         fig_season.update_layout(title="2. รูปแบบตามฤดูกาล (Seasonality)", height=200, xaxis_title=None)
                         st.plotly_chart(fig_season, use_container_width=True)
                     else:
-                         st.info("💡 การวิเคราะห์องค์ประกอบข้อมูล (Trend & Seasonality) จะแสดงผลเมื่อเลือกความละเอียดแบบ 'รายเดือน' เท่านั้น เนื่องจากมุมมองรายปีมีการสรุปตัวเลขรวมกันไปแล้ว")
+                         st.info("การวิเคราะห์องค์ประกอบข้อมูล (Trend & Seasonality) จะแสดงผลเมื่อเลือกความละเอียดแบบ 'รายเดือน' เท่านั้น")
 
                 st.markdown("---")
                 if time_resolution == "รายปี (Yearly)":
-                    st.subheader("🔮 ตารางพยากรณ์แนวโน้มรายปีล่วงหน้า")
+                    st.subheader("ตารางพยากรณ์แนวโน้มรายปีล่วงหน้า")
                 else:
-                    st.subheader("🔮 ตารางพยากรณ์ 12 เดือนข้างหน้า")
+                    st.subheader("ตารางพยากรณ์ 12 เดือนข้างหน้า")
                     
                 display_forecast = future_only[['ThaiDate', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
                 for col in ['yhat', 'yhat_lower', 'yhat_upper']:
@@ -391,9 +391,9 @@ with tab1:
 # TAB 2: AI Model & SWOT Analysis
 # ==============================================================================
 with tab2:
-    st.header("🧠 วิเคราะห์ปัจจัยและ SWOT Analysis ด้วย AI")
+    st.header("วิเคราะห์ปัจจัยและ SWOT Analysis")
 
-    with st.spinner("🤖 AI กำลังเรียนรู้ข้อมูล (Random Forest) ..."):
+    with st.spinner("กำลังเรียนรู้ข้อมูล (Random Forest) ..."):
         train_data = df_model_data.copy()
         train_data = train_data[train_data['Province'] != 'กรุงเทพมหานคร']
         
@@ -411,7 +411,7 @@ with tab2:
         feature_imp_df = feature_imp_df.sort_values('Importance', ascending=False)
 
     # Global Insights
-    st.subheader("1. ประสิทธิภาพโมเดลและความสำคัญของปัจจัย (Global Insights)")
+    st.subheader("ประสิทธิภาพโมเดลและความสำคัญของปัจจัย")
     
     col_acc, col_chart = st.columns([1, 3])
     with col_acc:
@@ -436,7 +436,7 @@ with tab2:
     sorted_provinces_df = train_data[['Province', 'Total_Tourists']].sort_values('Total_Tourists')
     sorted_provinces_list = sorted_provinces_df['Province'].tolist()
     
-    st.subheader("2. SWOT Analysis: รายจังหวัด (AI Generated)")
+    st.subheader("SWOT Analysis: รายจังหวัด")
     
     col_sel_prov, col_dummy = st.columns([1, 2])
     with col_sel_prov:
@@ -462,7 +462,7 @@ with tab2:
         comp_df = pd.DataFrame(comparison_data).set_index('Feature')
 
         # Action Plan
-        st.subheader("🛠️ กลยุทธ์เพื่อยกระดับการท่องเที่ยว (Action Plan)")
+        st.subheader("กลยุทธ์เพื่อยกระดับการท่องเที่ยว")
         st.caption("แนะนำเฉพาะปัจจัยที่สามารถควบคุมและปรับปรุงได้ (Actionable Factors) เรียงตามความสำคัญจากมากไปน้อย")
         
         sorted_actionable_imp = feature_imp_df[feature_imp_df['Feature'].isin(actionable_vars)].sort_values('Importance', ascending=False)
