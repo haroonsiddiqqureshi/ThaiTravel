@@ -87,7 +87,7 @@ def load_tourist_data():
 # --- 2. โหลดข้อมูลปัจจัย + Target ---
 @st.cache_data
 def load_factor_and_target_data():
-    file_id = '1UXLVSfu49m5ap9SYsBovT7Axmcvu0wN0'
+    file_id = '1fL7HTdKV7bZLGmayFw2JOO2tNZHKz3TE'
     csv_url = f'https://drive.google.com/uc?export=download&id={file_id}'
     df = pd.read_csv(csv_url)
     
@@ -106,14 +106,14 @@ def load_factor_and_target_data():
         'จำนวนการค้นหาบน\nFacebook ': 'จำนวนการค้นหาบน Facebook',
         'จำนวนการค้นหาบน\nTiktok': 'จำนวนการค้นหาบน Tiktok',
         'จำนวนการค้นหาบน\nInstagram ': 'จำนวนการค้นหาบน Instagram',
-        'แหล่งท่องเที่ยวเชิงศาสนา': 'จำนวนสถานที่ท่องเที่ยว', 
-        'แหล่งท่องเที่ยวเชิงประวัติศาสตร์\nและโบราณสถาน': 'โบราณสถาน',
-        'พิพิธภัณฑ์และแหล่งเรียนรู้': 'พิพิธภัณฑ์',
-        'แหล่งท่องเที่ยวเชิงนันทนาการ\nและสวนสาธารณะ': 'สวนสาธารณะ',
-        'แหล่งท่องเที่ยวเชิงพาณิชย์และตลาด': 'ตลาด',
-        'แหล่งท่องเที่ยวเชิงวัฒนธรรม\nร่วมสมัยและบันเทิง': 'ร่วมสมัยและบันเทิง',
-        'แหล่งท่องเที่ยวเชิงธรรมชาติ\nและสิ่งแวดล้อม': 'ธรรมชาติและสิ่งแวดล้อม',
-        'โครงสร้างพื้นฐานและสัญลักษณ์เมือง': 'สัญลักษณ์เมือง',
+        'ช้อปปิ้ง': 'ช้อปปิ้ง',
+        'กิจกรรมและความบันเทิง': 'กิจกรรมและความบันเทิง',
+        'ประวัติศาสตร์ วัฒนธรรมและศาสนา': 'ประวัติศาสตร์ วัฒนธรรมและศาสนา',
+        'พิพิธภัณฑ์': 'พิพิธภัณฑ์',
+        'สวนสาธารณะ': 'สวนสาธารณะ',
+        'วิถีชีวิตและชุมชน': 'วิถีชีวิตและชุมชน',
+        'สวนสัตว์ สวนน้ำ และสวนสนุก': 'สวนสัตว์ สวนน้ำ และสวนสนุก',
+        'ธรรมชาติ': 'ธรรมชาติ',
         'คาเฟ่': 'ความหนาแน่นของคาเฟ่',
         'ปัญหาด้านเศรษฐกิจและรายได้ประชากร': 'ปัญหาด้านเศรษฐกิจ',
         'ปัญหาโครงสร้างพื้นฐานและระบบคมนาคม': 'ปัญหาระบบการคมนาคม',
@@ -140,8 +140,7 @@ def load_factor_and_target_data():
     required_features = [
         'สนามบิน', 'รถไฟ', 'ระยะห่างจากกรุงเทพ', 'เดินทางโดยรถยนต์',
         'จำนวนการค้นหาบน Facebook', 'จำนวนการค้นหาบน Tiktok', 'จำนวนการค้นหาบน Instagram',
-        'จำนวนสถานที่ท่องเที่ยว',
-        'โบราณสถาน', 'พิพิธภัณฑ์', 'สวนสาธารณะ', 'ตลาด', 'ร่วมสมัยและบันเทิง', 'ธรรมชาติและสิ่งแวดล้อม', 'สัญลักษณ์เมือง',
+        'ช้อปปิ้ง', 'กิจกรรมและความบันเทิง', 'ประวัติศาสตร์ วัฒนธรรมและศาสนา', 'พิพิธภัณฑ์', 'สวนสาธารณะ', 'วิถีชีวิตและชุมชน', 'สวนสัตว์ สวนน้ำ และสวนสนุก', 'ธรรมชาติ',
         'ปัญหาด้านเศรษฐกิจ', 'ปัญหาระบบการคมนาคม', 'ปัญหามลพิษ', 'ปัญหาความเสี่ยงด้านภัยพิบัติ', 'ปัญหาคุณภาพชีวิต', 'ปัญหาโครงสร้างประชากร',
         'ความหนาแน่นของคาเฟ่',
         'ความสนใจต่อที่เที่ยว'
@@ -173,18 +172,18 @@ tab1, tab2 = st.tabs(["📊 พยากรณ์รายจังหวัด 
 # TAB 1: Forecast
 # ==============================================================================
 with tab1:
-    # --- [NEW UI DESIGN] Control Panel ---
-    with st.container(border=True):
+    # --- Control Panel ---
+    with st.container(border=False):
         st.write("###### 🛠️ แผงควบคุม (Control Panel)")
         
-        # Layout: แบ่งเป็น 3 ส่วนหลัก (Scope | Province | Analysis Mode)
-        col_scope, col_prov, col_mode = st.columns([1.5, 2, 2.5])
+        # Layout: แบ่งเป็น 4 ส่วนหลัก (Scope | Province | Analysis Mode | Time Resolution)
+        col_scope, col_prov, col_mode, col_time = st.columns([1.5, 3, 1.5, 1.5])
         
         with col_scope:
             view_mode = st.radio(
                 "📍 ขอบเขตข้อมูล",
                 ["ภาพรวมทั้งประเทศ", "เจาะจงรายจังหวัด"],
-                horizontal=True
+                horizontal=False
             )
 
         with col_prov:
@@ -198,17 +197,22 @@ with tab1:
                 disabled=is_disabled
             )
             
-            if is_disabled:
-                selected_province = 'ทั่วประเทศไทย'
-            else:
-                selected_province = selected_province_val
+            selected_province = 'ทั่วประเทศไทย' if is_disabled else selected_province_val
 
         with col_mode:
             analysis_mode = st.radio(
                 "📊 รูปแบบการวิเคราะห์",
                 ["ข้อมูลจริง (Raw Data)", "พยากรณ์ (Forecast)"],
-                horizontal=True,
-                index=0 # Default = Raw Data
+                horizontal=False,
+                index=0
+            )
+            
+        with col_time:
+            time_resolution = st.radio(
+                "📅 รูปแบบการแสดงข้อมูล",
+                ["รายปี (Yearly)", "รายเดือน (Monthly)"],
+                horizontal=False,
+                index=0
             )
 
     # --- Logic Process ---
@@ -218,17 +222,34 @@ with tab1:
     else:
         province_data = df_tourist[df_tourist['Province'] == selected_province]
     
-    melted_df = province_data.melt(id_vars=['Province'], var_name='Date', value_name='Tourists')
-    melted_df['Date'] = pd.to_datetime(melted_df['Date'])
-    melted_df = melted_df.dropna(subset=['Tourists'])
-    melted_df = melted_df.sort_values('Date')
-    melted_df['ThaiDate'] = melted_df['Date'].apply(lambda x: format_thai_date(x, full_month=True))
+    # 1. จัดเตรียมข้อมูลพื้นฐานรายเดือน (Raw Monthly Data)
+    raw_melted_df = province_data.melt(id_vars=['Province'], var_name='Date', value_name='Tourists')
+    raw_melted_df['Date'] = pd.to_datetime(raw_melted_df['Date'])
+    raw_melted_df = raw_melted_df.dropna(subset=['Tourists'])
+    raw_melted_df = raw_melted_df.sort_values('Date')
+
+    # เก็บค่าข้อมูลจริงเดือนล่าสุดไว้ใช้เชื่อมกราฟ
+    last_date_raw = raw_melted_df['Date'].iloc[-1]
+
+    # 2. แปลงข้อมูลตามความละเอียดที่เลือก (Yearly vs Monthly)
+    if time_resolution == "รายปี (Yearly)":
+        melted_df = raw_melted_df.copy()
+        melted_df['Year'] = melted_df['Date'].dt.year
+        # รวมจำนวนนักท่องเที่ยวตามปี
+        melted_df = melted_df.groupby('Year', as_index=False)['Tourists'].sum()
+        # จำลองวันที่เป็น 1 มกราคมของปีนั้นๆ เพื่อให้สร้างกราฟได้
+        melted_df['Date'] = pd.to_datetime(melted_df['Year'].astype(str) + '-01-01')
+        melted_df['ThaiDate'] = 'ปี ' + (melted_df['Year'] + 543).astype(str)
+    else:
+        melted_df = raw_melted_df.copy()
+        melted_df['ThaiDate'] = melted_df['Date'].apply(lambda x: format_thai_date(x, full_month=True))
 
     st.divider()
 
     if not melted_df.empty:
         last_date = melted_df['Date'].iloc[-1]
         last_value = melted_df['Tourists'].iloc[-1]
+        last_date_display = melted_df['ThaiDate'].iloc[-1]
         
         # Header Area
         col_head, col_met = st.columns([3, 1])
@@ -239,7 +260,7 @@ with tab1:
                 st.subheader(f"🔮 พยากรณ์แนวโน้มล่วงหน้า: {selected_province}")
         
         with col_met:
-            st.metric(label=f"ข้อมูลล่าสุด ({format_thai_date(last_date)})", value=f"{last_value:,.0f} คน")
+            st.metric(label=f"ข้อมูลล่าสุด ({last_date_display})", value=f"{last_value:,.0f} คน")
 
         # -----------------------------------------------------
         # MODE 1: Raw Data (Default)
@@ -256,8 +277,14 @@ with tab1:
                 hovertemplate="<b>%{customdata}</b><br>จำนวน: %{y:,.0f} คน<extra></extra>"
             ))
             
-            tick_vals = pd.date_range(start=melted_df['Date'].min(), end=melted_df['Date'].max(), freq='6MS')
-            tick_text = [format_thai_date(d) for d in tick_vals]
+            # การตั้งค่าแกน X ตามความละเอียดข้อมูล
+            if time_resolution == "รายปี (Yearly)":
+                tick_vals = melted_df['Date']
+                tick_text = melted_df['ThaiDate']
+            else:
+                tick_vals = pd.date_range(start=melted_df['Date'].min(), end=melted_df['Date'].max(), freq='6MS')
+                tick_text = [format_thai_date(d) for d in tick_vals]
+                
             fig.update_layout(
                 xaxis=dict(tickvals=tick_vals, ticktext=tick_text, title="ระยะเวลา (พ.ศ.)"), 
                 yaxis=dict(title="จำนวนนักท่องเที่ยว (คน)"),
@@ -267,10 +294,9 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
             
             st.write("#### 📋 ตารางข้อมูลสถิติย้อนหลัง")
-            display_raw = melted_df[['Date', 'Tourists']].sort_values('Date', ascending=False).copy()
-            display_raw['Date'] = display_raw['Date'].apply(lambda x: format_thai_date(x, full_month=True))
+            display_raw = melted_df[['ThaiDate', 'Tourists']].sort_values('ThaiDate', ascending=False).copy()
             display_raw['Tourists'] = display_raw['Tourists'].apply(format_number_with_unit)
-            display_raw.columns = ['เดือน/ปี', 'จำนวนนักท่องเที่ยว']
+            display_raw.columns = ['ช่วงเวลา', 'จำนวนนักท่องเที่ยว']
             st.dataframe(display_raw, use_container_width=True, hide_index=True)
 
         # -----------------------------------------------------
@@ -278,56 +304,85 @@ with tab1:
         # -----------------------------------------------------
         else:
             with st.spinner("⏳ AI กำลังคำนวณการพยากรณ์..."):
-                prophet_df = melted_df[['Date', 'Tourists']].rename(columns={'Date': 'ds', 'Tourists': 'y'})
+                # ให้โมเดลเรียนรู้ด้วยข้อมูล "รายเดือน" (raw_melted_df) เสมอ เพื่อจับแพทเทิร์นฤดูกาลให้แม่นยำ
+                prophet_df = raw_melted_df[['Date', 'Tourists']].rename(columns={'Date': 'ds', 'Tourists': 'y'})
                 m = Prophet()
                 m.fit(prophet_df)
                 future = m.make_future_dataframe(periods=12, freq='MS')
                 forecast = m.predict(future)
                 
-                forecast['ThaiDate'] = forecast['ds'].apply(lambda x: format_thai_date(x, full_month=True))
-                history = forecast[forecast['ds'] <= last_date]
-                future_only = forecast[forecast['ds'] > last_date]
+                # นำผลลัพธ์พยากรณ์มา GroupBy ตามตัวเลือก
+                if time_resolution == "รายปี (Yearly)":
+                    forecast['Year'] = forecast['ds'].dt.year
+                    forecast_plot = forecast.groupby('Year', as_index=False)[['yhat', 'yhat_lower', 'yhat_upper', 'trend']].sum()
+                    forecast_plot['ds'] = pd.to_datetime(forecast_plot['Year'].astype(str) + '-01-01')
+                    forecast_plot['ThaiDate'] = 'ปี ' + (forecast_plot['Year'] + 543).astype(str)
+                    
+                    history = forecast_plot[forecast_plot['ds'] <= last_date]
+                    future_only = forecast_plot[forecast_plot['ds'] > last_date]
+                else:
+                    forecast['ThaiDate'] = forecast['ds'].apply(lambda x: format_thai_date(x, full_month=True))
+                    forecast_plot = forecast
+                    history = forecast_plot[forecast_plot['ds'] <= last_date_raw]
+                    future_only = forecast_plot[forecast_plot['ds'] > last_date_raw]
+
+                # สร้างกราฟเชื่อมต่อระหว่างข้อมูลจริงกับพยากรณ์
+                if not future_only.empty and not history.empty:
+                    future_plot_line = pd.concat([history.iloc[[-1]], future_only])
+                else:
+                    future_plot_line = future_only
 
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=history['ds'], y=history['yhat'], mode='lines+markers', name='ข้อมูลจริง/เทรนด์', line=dict(color='#1f77b4', width=3), customdata=history['ThaiDate'], hovertemplate="<b>%{customdata}</b><br>จำนวน: %{y:,.0f} คน<extra></extra>"))
-                fig.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat'], mode='lines+markers', name='พยากรณ์ 12 เดือน', line=dict(color='#FF4B4B', width=3, dash='dot'), customdata=future_only['ThaiDate'], hovertemplate="<b>%{customdata}</b><br>พยากรณ์: %{y:,.0f} คน<extra></extra>"))
-                fig.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat_upper'], mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'))
-                fig.add_trace(go.Scatter(x=future_only['ds'], y=future_only['yhat_lower'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 75, 75, 0.2)', showlegend=False, hoverinfo='skip'))
+                fig.add_trace(go.Scatter(x=future_plot_line['ds'], y=future_plot_line['yhat'], mode='lines+markers', name='พยากรณ์อนาคต', line=dict(color='#FF4B4B', width=3, dash='dot'), customdata=future_plot_line['ThaiDate'], hovertemplate="<b>%{customdata}</b><br>พยากรณ์: %{y:,.0f} คน<extra></extra>"))
+                fig.add_trace(go.Scatter(x=future_plot_line['ds'], y=future_plot_line['yhat_upper'], mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'))
+                fig.add_trace(go.Scatter(x=future_plot_line['ds'], y=future_plot_line['yhat_lower'], mode='lines', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 75, 75, 0.2)', showlegend=False, hoverinfo='skip'))
                 
-                tick_vals = pd.date_range(start=forecast['ds'].min(), end=forecast['ds'].max(), freq='6MS')
-                tick_text = [format_thai_date(d) for d in tick_vals]
+                # การตั้งค่าแกน X ของกราฟพยากรณ์
+                if time_resolution == "รายปี (Yearly)":
+                    tick_vals = forecast_plot['ds']
+                    tick_text = forecast_plot['ThaiDate']
+                else:
+                    tick_vals = pd.date_range(start=forecast['ds'].min(), end=forecast['ds'].max(), freq='6MS')
+                    tick_text = [format_thai_date(d) for d in tick_vals]
+                    
                 fig.update_layout(xaxis=dict(tickvals=tick_vals, ticktext=tick_text, title="ระยะเวลา (พ.ศ.)"), yaxis=dict(title="จำนวนนักท่องเที่ยว (คน)"), legend=dict(orientation="h", y=1.1))
                 st.plotly_chart(fig, use_container_width=True)
 
                 row2_col1, row2_col2 = st.columns([1, 2])
                 with row2_col1:
                     st.write("#### 📋 ข้อมูลประวัติย้อนหลัง")
-                    display_raw = melted_df[['Date', 'Tourists']].sort_values('Date', ascending=False).copy()
-                    display_raw['Date'] = display_raw['Date'].apply(lambda x: format_thai_date(x, full_month=True))
+                    display_raw = melted_df[['ThaiDate', 'Tourists']].sort_values('ThaiDate', ascending=False).copy()
                     display_raw['Tourists'] = display_raw['Tourists'].apply(format_number_with_unit)
-                    display_raw.columns = ['เดือน/ปี', 'จำนวนนักท่องเที่ยว']
+                    display_raw.columns = ['ช่วงเวลา', 'จำนวนนักท่องเที่ยว']
                     st.dataframe(display_raw, height=400, use_container_width=True, hide_index=True)
 
                 with row2_col2:
-                    st.write("#### 📊 องค์ประกอบของข้อมูล (Decomposition)")
-                    fig_trend = px.line(forecast, x='ds', y='trend', custom_data=['ThaiDate'])
-                    fig_trend.update_traces(line_color='#2ca02c')
-                    fig_trend.update_layout(title="1. แนวโน้มระยะยาว (Trend)", height=200, xaxis_title=None)
-                    st.plotly_chart(fig_trend, use_container_width=True)
+                    if time_resolution == "รายเดือน (Monthly)":
+                        st.write("#### 📊 องค์ประกอบของข้อมูล (Decomposition)")
+                        fig_trend = px.line(forecast, x='ds', y='trend', custom_data=['ThaiDate'])
+                        fig_trend.update_traces(line_color='#2ca02c')
+                        fig_trend.update_layout(title="1. แนวโน้มระยะยาว (Trend)", height=200, xaxis_title=None)
+                        st.plotly_chart(fig_trend, use_container_width=True)
 
-                    fig_season = px.line(future_only, x='ds', y='yearly', markers=True, custom_data=['ThaiDate'])
-                    fig_season.update_traces(line_color='#ff7f0e')
-                    fig_season.update_xaxes(tickvals=future_only['ds'], ticktext=[thai_months_abbr[d.month-1] for d in future_only['ds']])
-                    fig_season.update_layout(title="2. รูปแบบตามฤดูกาล (Seasonality)", height=200, xaxis_title=None)
-                    st.plotly_chart(fig_season, use_container_width=True)
+                        fig_season = px.line(future_only, x='ds', y='yearly', markers=True, custom_data=['ThaiDate'])
+                        fig_season.update_traces(line_color='#ff7f0e')
+                        fig_season.update_xaxes(tickvals=future_only['ds'], ticktext=[thai_months_abbr[d.month-1] for d in future_only['ds']])
+                        fig_season.update_layout(title="2. รูปแบบตามฤดูกาล (Seasonality)", height=200, xaxis_title=None)
+                        st.plotly_chart(fig_season, use_container_width=True)
+                    else:
+                         st.info("💡 การวิเคราะห์องค์ประกอบข้อมูล (Trend & Seasonality) จะแสดงผลเมื่อเลือกความละเอียดแบบ 'รายเดือน' เท่านั้น เนื่องจากมุมมองรายปีมีการสรุปตัวเลขรวมกันไปแล้ว")
 
                 st.markdown("---")
-                st.subheader("🔮 ตารางพยากรณ์ 12 เดือนข้างหน้า")
-                display_forecast = future_only[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
-                display_forecast['ds'] = display_forecast['ds'].apply(lambda x: format_thai_date(x, full_month=True))
+                if time_resolution == "รายปี (Yearly)":
+                    st.subheader("🔮 ตารางพยากรณ์แนวโน้มรายปีล่วงหน้า")
+                else:
+                    st.subheader("🔮 ตารางพยากรณ์ 12 เดือนข้างหน้า")
+                    
+                display_forecast = future_only[['ThaiDate', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
                 for col in ['yhat', 'yhat_lower', 'yhat_upper']:
                     display_forecast[col] = display_forecast[col].apply(format_number_with_unit)
-                display_forecast.columns = ['เดือน/ปี', 'ค่าพยากรณ์', 'ขอบเขตล่าง', 'ขอบเขตบน']
+                display_forecast.columns = ['ช่วงเวลา', 'ค่าพยากรณ์', 'ขอบเขตล่าง', 'ขอบเขตบน']
                 st.dataframe(display_forecast, use_container_width=True, hide_index=True)
     else:
         st.warning("ไม่มีข้อมูลเพียงพอสำหรับการแสดงผล")
