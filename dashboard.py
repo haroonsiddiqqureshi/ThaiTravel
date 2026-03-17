@@ -10,6 +10,15 @@ from sklearn.metrics import r2_score
 # ตั้งค่าหน้า Dashboard
 st.set_page_config(page_title="Thai Travel Dashboard", layout="wide", page_icon="🇹🇭")
 
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 st.title("🇹🇭 Thai Travel Statistics & Data Analysis")
 
 # --- Helper Functions ---
