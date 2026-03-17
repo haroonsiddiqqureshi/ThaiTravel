@@ -19,6 +19,15 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+hide_github_icon = """
+<style>
+/* ซ่อนปุ่ม Deploy และไอคอน GitHub มุมขวาบน */
+.stAppDeployButton {display:none;}
+[data-testid="stToolbar"] {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_github_icon, unsafe_allow_html=True)
+
 st.title("🇹🇭 Thai Travel Statistics & Data Analysis")
 
 # --- Helper Functions ---
